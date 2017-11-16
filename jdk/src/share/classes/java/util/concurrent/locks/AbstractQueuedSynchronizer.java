@@ -376,22 +376,46 @@ public abstract class AbstractQueuedSynchronizer
      * Scherer and Michael Scott, along with members of JSR-166
      * expert group, for helpful ideas, discussions, and critiques
      * on the design of this class.
-     */
+     * 
+     * 等待队列节点类。
+     * <p> 等待队列是一个变种的"CLH"（克雷格，平台，和hagersten）锁队列。CLH锁是通常用于轮转锁
+     *   我们用它们锁同步器，但使用着一些关于在其节点的前驱线程控制信息相同的基本策略
+     *   每个节点中的"status"字段跟踪线程是否应该阻塞。
+     *   每个节点在其前身释放时发出信号。
+     *   队列中的每个节点作为特定的通知样式监视器充当单个等待线程。
+     *   status字段不控制线程是否被授予锁等。
+     *   如果线程是队列中的第一个线程，则可以尝试获取锁。但是，第一并不能保证成功，它只给予斗争的权利。所以目前发布的竞争者线程可能需要rewait。
+     * <p> 为了进入CLH锁，你自动拼接在新队尾。你只有是对头时才会出队。
+     * <pre>
+     *      +------+  prev +-----+       +-----+
+     * head |      | <---- |     | <---- |     |  tail
+     *      +------+       +-----+       +-----+
+     * </pre>
+     * <p> 插入CLH队列只需要一个单一的原子操作的"tail"，所以有一个简单的原子unqueued分界点排队
+     *     同样，出列只涉及更新的"head"。然而，它需要更多的工作来确定谁是他们的接班人是节点，部分应付可能抵消由于超时和中断。
+     * <p> "prev"的链接（不使用原来的CLH锁），主要是用来处理取消,如果一个节点被取消，其继承人（通常）链接到一个非取消前任。
+     *     在自旋锁的情况下，类似的力学解释，看报纸的史葛和Scherer在http://www.cs.rochester.edu/u/scott/synchronization/
+     * <p> 我们还使用“下一步”链接实现阻塞机制。  
+     *   
+     */ 
     static final class Node {
-        /** Marker to indicate a node is waiting in shared mode */
+        /** Marker to indicate a node is waiting in shared mode 指示节点在共享模式中等待的标记。*/
         static final Node SHARED = new Node();
-        /** Marker to indicate a node is waiting in exclusive mode */
+        /** Marker to indicate a node is waiting in exclusive mode 指示节点在独占模式下等待的标记。*/
         static final Node EXCLUSIVE = null;
 
-        /** waitStatus value to indicate thread has cancelled */
+        /** waitStatus value to indicate thread has cancelled waitStatus的值表示线程已经被取消*/
         static final int CANCELLED =  1;
-        /** waitStatus value to indicate successor's thread needs unparking */
+        /** waitStatus value to indicate successor's thread needs unparking 
+          waitStatus的值表明继任者的线程需要unparking */
         static final int SIGNAL    = -1;
-        /** waitStatus value to indicate thread is waiting on condition */
+        /** waitStatus value to indicate thread is waiting on condition 
+         * waitStatus的值表明线程在等待条件成熟 */
         static final int CONDITION = -2;
         /**
          * waitStatus value to indicate the next acquireShared should
-         * unconditionally propagate
+         * unconditionally propagate 
+         *  waitStatus的值表明下一个acquireShared应该无条件地传播
          */
         static final int PROPAGATE = -3;
 
@@ -878,6 +902,7 @@ public abstract class AbstractQueuedSynchronizer
 
     /**
      * Acquires in exclusive interruptible mode.
+     * 以独占的,可中断模式获取。
      * @param arg the acquire argument
      */
     private void doAcquireInterruptibly(int arg)
@@ -943,6 +968,7 @@ public abstract class AbstractQueuedSynchronizer
 
     /**
      * Acquires in shared uninterruptible mode.
+     * 以共享的不可中断模式获取。
      * @param arg the acquire argument
      */
     private void doAcquireShared(int arg) {
@@ -975,6 +1001,7 @@ public abstract class AbstractQueuedSynchronizer
 
     /**
      * Acquires in shared interruptible mode.
+     * 以共享的可中断模式获取。
      * @param arg the acquire argument
      */
     private void doAcquireSharedInterruptibly(int arg)
@@ -1005,6 +1032,7 @@ public abstract class AbstractQueuedSynchronizer
 
     /**
      * Acquires in shared timed mode.
+     * 以共享的时控的模式获取。
      *
      * @param arg the acquire argument
      * @param nanosTimeout max wait time
